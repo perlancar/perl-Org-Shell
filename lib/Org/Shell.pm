@@ -1,4 +1,4 @@
-package Tree::Shell;
+package Org::Shell;
 
 # AUTHORITY
 # DATE
@@ -25,7 +25,7 @@ sub new {
     $class->_install_cmds;
 
     my $self = $class->SUPER::new();
-    $self->{program_name} = $args{program_name} // 'treesh';
+    $self->{program_name} = $args{program_name} // 'orgsh';
 
     $self->load_history;
 
@@ -42,8 +42,8 @@ sub new {
         (detect_terminal_cached()->{color_depth} > 1 ? 1:0);
 
     # beginning state
-    $self->{_state}{objects} = {};
-    $self->{_state}{curobj}  = undef;
+    $self->{_state}{orgs} = {};
+    $self->{_state}{curorg}  = undef;
 
     $self;
 }
@@ -272,14 +272,14 @@ sub postloop {
 sub prompt_str {
     my $self = shift;
 
-    my $curobj = $self->state('curobj');
-    my $obj = $self->state('objects')->{$curobj // ''};
+    my $curorg = $self->state('curorg');
+    my $org = $self->state('orgs')->{$curorg // ''};
 
     join(
         "",
-        $self->colorize("treesh", "ff6347"), " ", # X:tomato
-        $self->colorize(($curobj // '(no curobj)'), "eeee00"), " ", # X:yellow2
-        $self->colorize(($obj ? $obj->{fs}->cwd : "/"), "00e5ee"), "", # X:turquoise2
+        $self->colorize("orgsh", "ff6347"), " ", # X:tomato
+        $self->colorize(($curorg // '(no curorg)'), "eeee00"), " ", # X:yellow2
+        $self->colorize(($org ? $org->{fs}->cwd : "/"), "00e5ee"), "", # X:turquoise2
         "> ",
     );
 }
@@ -369,7 +369,7 @@ sub _run_cmd {
     }
 
     my $fmt = $opts->{fmt} //
-        $res->[3]{"x.app.treesh.default_format"} //
+        $res->[3]{"x.app.orgsh.default_format"} //
             $self->setting('output_format');
 
     print Perinci::Result::Format::format($res, $fmt);
@@ -386,10 +386,10 @@ sub comp_ {
 
     # add commands
     my @res = ("help", "exit");
-    push @res, grep {/\A\w+\z/} keys %Tree::Shell::Commands::SPEC;
+    push @res, grep {/\A\w+\z/} keys %Org::Shell::Commands::SPEC;
 
     ## add directories
-    #my $dirs = $Tree::Shell::Commands::complete_path->(
+    #my $dirs = $Org::Shell::Commands::complete_path->(
     #    word => "",
     #    -shell => $self,
     #);
@@ -432,7 +432,7 @@ sub catch_comp {
 
     local $self->{_in_completion} = 1;
 
-    my $meta = $Tree::Shell::Commands::SPEC{$cmd};
+    my $meta = $Org::Shell::Commands::SPEC{$cmd};
     return () unless $meta;
 
     my ($words, $cword) = @{ Complete::Bash::parse_cmdline(
@@ -465,13 +465,13 @@ sub _install_cmds {
 
     return if $installed;
 
-    require Tree::Shell::Commands;
+    require Org::Shell::Commands;
     require Complete::Util;
-    for my $cmd (sort keys %Tree::Shell::Commands::SPEC) {
+    for my $cmd (sort keys %Org::Shell::Commands::SPEC) {
         next unless $cmd =~ /\A\w+\z/; # only functions
         log_trace("Installing command $cmd ...");
-        my $meta = $Tree::Shell::Commands::SPEC{$cmd};
-        my $code = \&{"Tree::Shell::Commands::$cmd"};
+        my $meta = $Org::Shell::Commands::SPEC{$cmd};
+        my $code = \&{"Org::Shell::Commands::$cmd"};
         *{"smry_$cmd"} = sub { $meta->{summary} };
         *{"run_$cmd"} = sub {
             my $self = shift;
@@ -525,13 +525,13 @@ sub _install_cmds {
 }
 
 1;
-# ABSTRACT: Navigate and manipulate in-memory tree objects using a CLI shell
+# ABSTRACT: Navigate and manipulate in-memory Org document tree using a CLI shell
 
 =for Pod::Coverage ^(.+)$
 
 =head1 SYNOPSIS
 
-See L<treesh> for more details.
+See L<orgsh> for more details.
 
 
 =head1 SEE ALSO

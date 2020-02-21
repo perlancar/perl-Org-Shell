@@ -1,4 +1,4 @@
-package Tree::Shell::Commands;
+package Org::Shell::Commands;
 
 # AUTHORITY
 # DATE
@@ -16,7 +16,7 @@ our %SPEC;
 
 $SPEC{':package'} = {
     v => 1.1,
-    summary => 'treesh commands',
+    summary => 'orgsh commands',
 };
 
 our $complete_path = sub {
@@ -27,11 +27,11 @@ our $complete_path = sub {
     my ($dir, $word) = $word0 =~ m!(.*/)?(.*)!;
     $dir //= "";
 
-    my $obj = $shell->state('objects')->{ $args{object} // $shell->state('curobj') // '' };
-    return {message=>"No current object, please load some objects first"} unless $obj;
+    my $org = $shell->state('orgs')->{ $args{org} // $shell->state('curorg') // '' };
+    return {message=>"No current Org document, please load some Org documents first"} unless $org;
 
-    my $cwd = $obj->{fs}->cwd;
-    my @entries = $obj->{fs}->ls(
+    my $cwd = $org->{fs}->cwd;
+    my @entries = $org->{fs}->ls(
         length($dir) ? Path::Naive::concat_and_normalize_path($cwd, $dir)."/*" : undef);
 
     [map {(length($dir) ? $dir : "") . "$_->{name}/"} @entries];
@@ -44,27 +44,27 @@ my $complete_setting_name = sub {
     [keys %{ $shell->known_settings }];
 };
 
-our $complete_object_name = sub {
+our $complete_org_name = sub {
     my %args = @_;
     my $shell = $args{-shell};
 
-    [keys %{ $shell->state('objects') }];
+    [keys %{ $shell->state('orgs') }];
 };
 
-my %arg0_object = (
-    object => {
+my %arg0_org = (
+    org => {
         schema => ['str*', match=>qr/\A\w+\z/],
-        completion => $complete_object_name,
+        completion => $complete_org_name,
         req => 1,
         pos => 0,
     },
 );
 
-my %argopt_object = (
-    object => {
+my %argopt_org = (
+    org => {
         schema => ['str*', match=>qr/\A\w+\z/],
         cmdline_aliases => {o=>{}},
-        completion => $complete_object_name,
+        completion => $complete_org_name,
     },
 );
 
@@ -100,9 +100,9 @@ my %argopt0_path = (
 
 my @drivers = qw(json yaml org);
 
-$SPEC{loadobj} = {
+$SPEC{loadorg} = {
     v => 1.1,
-    summary => 'Load tree object',
+    summary => 'Load Org document',
     description => <<'_',
 
 _
@@ -112,14 +112,9 @@ _
             pos => 0,
             req => 1,
         },
-        driver => {
-            schema => ['str*', {in=>\@drivers}],
-            pos => 1,
-            req => 1,
-        },
         source => {
             schema => ['pathname*'],
-            pos => 2,
+            pos => 1,
             req => 1,
             completion => sub {
                 require Complete::File;
@@ -133,7 +128,7 @@ _
         },
     },
 };
-sub loadobj {
+sub loadorg {
     require File::Slurper::Dash;
 
     my %args = @_;
@@ -142,84 +137,65 @@ sub loadobj {
     my $source = $args{source};
     my $shell  = $args{-shell};
 
-    if ($shell->state('objects')->{$as}) {
-        return [412, "Object with named '$as' already loaded, perhaps choose another name?"];
+    if ($shell->state('orgs')->{$as}) {
+        return [412, "Org document with named '$as' already loaded, perhaps choose another name?"];
     }
 
     my $fs;
-    if ($driver eq 'json') {
-        return [501, "Not implemented"];
-        #require Data::CSel::WrapStruct;
-        #require JSON::MaybeXS;
-        #my $json = JSON::MaybeXS->new(allow_nonref=>1, canonical=>1);
-        #my $data = $json->decode(File::Slurper::Dash::read_text($source));
-        #$tree = Data::CSel::WrapStruct::wrap_struct($data);
-    } elsif ($driver eq 'yaml') {
-        return [501, "Not implemented"];
-        #require Data::CSel::WrapStruct;
-        #require YAML::XS;
-        #my $data = YAML::XS::Load(File::Slurper::Dash::read_text($source));
-        #my $tree = Data::CSel::WrapStruct::wrap_struct($data);
-    } elsif ($driver eq 'org') {
-        require Tree::FSMethods::Org;
-        eval { $fs = Tree::FSMethods::Org->new(org_file => $source) };
-        return [500, "Can't load org file: $@"] if $@;
-    } else {
-        return [500, "Unknown driver '$driver', known drivers: ".join(", ", @drivers)];
-    }
+    require Tree::FSMethods::Org;
+    eval { $fs = Tree::FSMethods::Org->new(org_file => $source) };
+    return [500, "Can't load org file: $@"] if $@;
 
-    $shell->state('objects')->{$as} = {
-        driver => $driver,
+    $shell->state('orgs')->{$as} = {
         source => $source,
         fs     => $fs,
     };
-    $shell->state('curobj', $as) unless defined $shell->state('curobj');
+    $shell->state('curorg', $as) unless defined $shell->state('curorg');
     return [200, "OK"];
 }
 
-$SPEC{objects} = {
+$SPEC{orgs} = {
     v => 1.1,
-    summary => 'List loaded objects',
+    summary => 'List loaded Org documents',
     description => <<'_',
 
 _
     args => {
     },
 };
-sub objects {
+sub orgs {
     my %args = @_;
     my $shell  = $args{-shell};
 
-    my $objects = $shell->state('objects');
-    my $curobj  = $shell->state('curobj') // '';
+    my $orgs    = $shell->state('orgs');
+    my $curorg  = $shell->state('curorg') // '';
     my @rows;
-    for my $name (sort keys %$objects) {
+    for my $name (sort keys %$orgs) {
         push @rows, {
             name => $name,
-            driver => $objects->{$name}{driver},
-            source => $objects->{$name}{source},
-            active => $name eq $curobj ? 1:0,
-            cwd    => $objects->{$name}{fs}->cwd,
+            source => $orgs->{$name}{source},
+            active => $name eq $curorg ? 1:0,
+            cwd    => $orgs->{$name}{fs}->cwd,
         };
     }
-    [200, "OK", \@rows, {'table.fields'=>[qw/name driver source active cwd/]}];
+    [200, "OK", \@rows, {'table.fields'=>[qw/name source active cwd/]}];
 }
 
-$SPEC{setcurobj} = {
+$SPEC{setcurorg} = {
     v => 1.1,
-    summary => 'Set current object',
+    summary => 'Set current Org document',
     args => {
-        %arg0_object,
+        %arg0_org,
     },
 };
-sub setcurobj {
+sub setcurorg {
     my %args = @_;
     my $shell  = $args{-shell};
 
-    my $objects = $shell->state('objects');
-    $objects->{ $args{object} }
-        or return [404, "No such object '$args{object}'"];
-    $shell->state('curobj', $args{object});
+    my $orgs = $shell->state('orgs');
+    $orgs->{ $args{org} }
+        or return [404, "No such Org document '$args{org}'"];
+    $shell->state('curorg', $args{org});
     [200];
 }
 
@@ -227,7 +203,7 @@ $SPEC{cat} = {
     v => 1.1,
     summary => 'Print node as string',
     args => {
-        %argopt_object,
+        %argopt_org,
         %arg0_path,
     },
 };
@@ -235,24 +211,24 @@ sub cat {
     my %args = @_;
     my $shell  = $args{-shell};
 
-    my $obj = $shell->state('objects')->{ $args{object} // $shell->state('curobj') // '' };
-    unless ($obj) {
-        return [412, "No such object '$args{object}'"] if defined $args{object};
-        return [412, "No loaded objects, load some first using 'loadobj'"];
+    my $org = $shell->state('orgs')->{ $args{org} // $shell->state('curorg') // '' };
+    unless ($org) {
+        return [412, "No such Org document '$args{org}'"] if defined $args{org};
+        return [412, "No loaded Org documents, load some first using 'loadorg'"];
     }
 
     my $node;
     eval {
-        $node = $obj->{fs}->get($args{path});
+        $node = $org->{fs}->get($args{path});
     };
     return [500, "Can't cat: $@"] if $@;
 
     [200, "OK", $node->as_string];
 }
 
-$SPEC{dumpobj} = {
+$SPEC{dumporg} = {
     v => 1.1,
-    summary => 'Dump a loaded object',
+    summary => 'Dump a loaded Org document',
     description => <<'_',
 
 _
@@ -260,23 +236,23 @@ _
         name => {
             schema => ['str*'],
             pos => 0,
-            completion => $complete_object_name,
+            completion => $complete_org_name,
         },
     },
 };
-sub dumpobj {
+sub dumporg {
     my %args = @_;
     my $name   = $args{name};
     my $shell  = $args{-shell};
 
-    $name //= $shell->state('curobj');
-    return [412, "Please load an object first"] unless defined $name;
+    $name //= $shell->state('curorg');
+    return [412, "Please load an Org document first"] unless defined $name;
 
-    my $objects = $shell->state('objects');
-    return [404, "No object by that name"] unless $objects->{$name};
+    my $orgs = $shell->state('orgs');
+    return [404, "No Org document by that name"] unless $orgs->{$name};
 
     require Tree::Dump;
-    [200, "OK", Tree::Dump::tdmp($objects->{$name}{fs}{tree}),
+    [200, "OK", Tree::Dump::tdmp($orgs->{$name}{fs}{tree}),
      {'cmdline.skip_format'=>1}];
 }
 
@@ -284,7 +260,7 @@ $SPEC{ls} = {
     v => 1.1,
     summary => 'List children nodes',
     args => {
-        %argopt_object,
+        %argopt_org,
         long => {
             summary => 'Long mode (detail=1)',
             schema => ['true*'],
@@ -315,15 +291,15 @@ sub ls {
 
     my $resmeta = {};
 
-    my $obj = $shell->state('objects')->{ $args{object} // $shell->state('curobj') // '' };
-    unless ($obj) {
-        return [412, "No such object '$args{object}'"] if defined $args{object};
-        return [412, "No loaded objects, load some first using 'loadobj'"];
+    my $org = $shell->state('orgs')->{ $args{org} // $shell->state('curorg') // '' };
+    unless ($org) {
+        return [412, "No such Org document '$args{org}'"] if defined $args{org};
+        return [412, "No loaded Org documents, load some first using 'loadorg'"];
     }
 
     my @rows;
     my @entries;
-    eval { @entries = $obj->{fs}->ls($args{path}) };
+    eval { @entries = $org->{fs}->ls($args{path}) };
     return [500, "Can't ls: $@"] if $@;
 
     for my $entry (@entries) {
@@ -343,30 +319,30 @@ sub ls {
 
 $SPEC{pwd} = {
     v => 1.1,
-    summary => 'Show current directory of object',
+    summary => 'Show current directory in an Org document',
     args => {
-        %argopt_object,
+        %argopt_org,
     },
 };
 sub pwd {
     my %args = @_;
     my $shell = $args{-shell};
 
-    my $objname = $args{object} // $shell->state('curobj') // '';
-    my $obj = $shell->state('objects')->{ $objname };
-    unless ($obj) {
-        return [412, "No such object '$args{object}'"] if defined $args{object};
-        return [412, "No loaded objects, load some first using 'loadobj'"];
+    my $orgname = $args{org} // $shell->state('curorg') // '';
+    my $org = $shell->state('orgs')->{ $orgname };
+    unless ($org) {
+        return [412, "No such Org document '$args{org}'"] if defined $args{org};
+        return [412, "No loaded Org documents, load some first using 'loadorg'"];
     }
 
-    return [200, "OK", "$obj->{fs}{_curpath} ($objname)"];
+    return [200, "OK", "$org->{fs}{_curpath} ($orgname)"];
 }
 
 $SPEC{cd} = {
     v => 1.1,
     summary => "Change directory",
     args => {
-        %argopt_object,
+        %argopt_org,
         path => {
             summary    => '',
             schema     => ['str*'],
@@ -380,26 +356,26 @@ sub cd {
     my $path = $args{path};
     my $shell = $args{-shell};
 
-    my $obj = $shell->state('objects')->{ $args{object} // $shell->state('curobj') // '' };
-    unless ($obj) {
-        return [412, "No such object '$args{object}'"] if defined $args{object};
-        return [412, "No loaded objects, load some first using 'loadobj'"];
+    my $org = $shell->state('orgs')->{ $args{org} // $shell->state('curorg') // '' };
+    unless ($org) {
+        return [412, "No such Org document '$args{org}'"] if defined $args{org};
+        return [412, "No loaded Org documents, load some first using 'loadorg'"];
     }
 
-    my $cwd = $obj->{fs}->cwd;
+    my $cwd = $org->{fs}->cwd;
     if ($path eq '-') {
-        if (defined $obj->{oldcwd}) {
-            $path = $obj->{oldcwd};
+        if (defined $org->{oldcwd}) {
+            $path = $org->{oldcwd};
         } else {
             return [412, "Old directory not set yet, cd to some directory first"];
         }
     }
 
-    eval { $obj->{fs}->cd($path) };
+    eval { $org->{fs}->cd($path) };
     if ($@) {
         return [500, "Can't cd: $@"];
     } else {
-        $obj->{oldcwd} = $cwd;
+        $org->{oldcwd} = $cwd;
         return [200, "OK"];
     }
 }
@@ -408,7 +384,7 @@ $SPEC{tree} = {
     v => 1.1,
     summary => 'Show filesystem tree',
     args => {
-        %argopt_object,
+        %argopt_org,
         %argopt0_path,
     },
 };
@@ -418,13 +394,13 @@ sub tree {
 
     my $resmeta = {};
 
-    my $obj = $shell->state('objects')->{ $args{object} // $shell->state('curobj') // '' };
-    unless ($obj) {
-        return [412, "No such object '$args{object}'"] if defined $args{object};
-        return [412, "No loaded objects, load some first using 'loadobj'"];
+    my $org = $shell->state('orgs')->{ $args{org} // $shell->state('curorg') // '' };
+    unless ($org) {
+        return [412, "No such Org document '$args{org}'"] if defined $args{org};
+        return [412, "No loaded Org documents, load some first using 'loadorg'"];
     }
 
-    [200, "OK", $obj->{fs}->showtree($args{path})];
+    [200, "OK", $org->{fs}->showtree($args{path})];
 }
 
 our %args_cp_or_mv = (
@@ -434,18 +410,18 @@ our %args_cp_or_mv = (
         completion => sub {
             my %args = @_;
             my $shell = $args{-shell};
-            my $obj = $shell->state('objects')->{ $shell->state('curobj') // '' };
-            return [] unless $obj;
+            my $org = $shell->state('orgs')->{ $shell->state('curorg') // '' };
+            return [] unless $org;
             my $res = $complete_path->(%args);
             $res;
         },
         req => 1,
         pos => 0,
     },
-    target_object => {
-        summary => 'Target object name',
+    target_org => {
+        summary => 'Target Org document name',
         schema => ['str*', match=>qr/\A\w+\z/],
-        completion => $complete_object_name,
+        completion => $complete_org_name,
     },
     target_path => {
         summary => 'Target path',
@@ -453,13 +429,13 @@ our %args_cp_or_mv = (
         completion => sub {
             my %args = @_;
             my $shell = $args{-shell};
-            my $target_object = $args{args}{target_object};
-            my $obj = $shell->state('objects')->{ $target_object // $shell->state('curobj') // '' };
-            return [] unless $obj;
-            my $save_curobj = $shell->state('curobj');
-            $shell->state('curobj', $target_object) if defined $target_object;
+            my $target_org = $args{args}{target_org};
+            my $org = $shell->state('orgs')->{ $target_org // $shell->state('curorg') // '' };
+            return [] unless $org;
+            my $save_curorg = $shell->state('curorg');
+            $shell->state('curorg', $target_org) if defined $target_org;
             my $res = $complete_path->(%args);
-            $shell->state('curobj', $save_curobj);
+            $shell->state('curorg', $save_curorg);
             $res;
         },
         req => 1,
@@ -473,17 +449,17 @@ sub _cp_or_mv {
     my %args = @_;
     my $shell = $args{-shell};
 
-    my $src_obj = $shell->state('objects')->{ $shell->state('curobj') // '' }
-        or return [412, "No object loaded, please load an object first"];
-    my $target_obj = $shell->state('objects')->{ $args{target_object} // $shell->state('curobj') // '' }
-        or return [412, "No such target object '$args{target_object}'"];
+    my $src_org    = $shell->state('orgs')->{ $shell->state('curorg') // '' }
+        or return [412, "No Org document loaded, please load an Org document first"];
+    my $target_org = $shell->state('orgs')->{ $args{target_org} // $shell->state('curorg') // '' }
+        or return [412, "No such target Org document '$args{target_org}'"];
 
     eval {
-        local $src_obj->{fs}{tree2} = $target_obj->{fs}{tree};
-        local $src_obj->{fs}{_curnode2} = $target_obj->{fs}{_curnode};
-        local $src_obj->{fs}{_curpath2} = $target_obj->{fs}{_curpath};
+        local $src_org->{fs}{tree2}     = $target_org->{fs}{tree};
+        local $src_org->{fs}{_curnode2} = $target_org->{fs}{_curnode};
+        local $src_org->{fs}{_curpath2} = $target_org->{fs}{_curpath};
 
-        $src_obj->{fs}->$which($args{src_path}, $args{target_path});
+        $src_org->{fs}->$which($args{src_path}, $args{target_path});
     };
     return [500, "Can't $which: $@"] if $@;
     [200];
@@ -491,7 +467,7 @@ sub _cp_or_mv {
 
 $SPEC{cp} = {
     v => 1.1,
-    summary => 'Copy nodes from one object to another',
+    summary => 'Copy nodes from one Org document to another',
     args => {
         %args_cp_or_mv,
     },
@@ -502,7 +478,7 @@ sub cp {
 
 $SPEC{mv} = {
     v => 1.1,
-    summary => 'Move nodes from one object to another',
+    summary => 'Move nodes from one Org document to another',
     args => {
         %args_cp_or_mv,
     },
@@ -516,7 +492,7 @@ $SPEC{rm} = {
     summary => 'Remove nodes',
     args => {
         %arg0_path,
-        %argopt_object,
+        %argopt_org,
     },
 };
 sub rm {
@@ -525,14 +501,14 @@ sub rm {
 
     my $resmeta = {};
 
-    my $obj = $shell->state('objects')->{ $args{object} // $shell->state('curobj') // '' };
-    unless ($obj) {
-        return [412, "No such object '$args{object}'"] if defined $args{object};
-        return [412, "No loaded objects, load some first using 'loadobj'"];
+    my $org = $shell->state('orgs')->{ $args{org} // $shell->state('curorg') // '' };
+    unless ($org) {
+        return [412, "No such Org document '$args{org}'"] if defined $args{org};
+        return [412, "No loaded Org documents, load some first using 'loadorg'"];
     }
 
     eval {
-        $obj->{fs}->rm($args{path});
+        $org->{fs}->rm($args{path});
     };
     return [500, "Can't rm: $@"] if $@;
 
@@ -544,7 +520,7 @@ $SPEC{mkdir} = {
     summary => 'Create an empty directory',
     args => {
         %arg0_paths,
-        %argopt_object,
+        %argopt_org,
         parents => {
             schema => 'true*',
             cmdline_aliases => {p=>{}},
@@ -557,10 +533,10 @@ sub mkdir {
 
     my $resmeta = {};
 
-    my $obj = $shell->state('objects')->{ $args{object} // $shell->state('curobj') // '' };
-    unless ($obj) {
-        return [412, "No such object '$args{object}'"] if defined $args{object};
-        return [412, "No loaded objects, load some first using 'loadobj'"];
+    my $org = $shell->state('orgs')->{ $args{org} // $shell->state('curorg') // '' };
+    unless ($org) {
+        return [412, "No such Org document '$args{org}'"] if defined $args{org};
+        return [412, "No loaded Org documents, load some first using 'loadorg'"];
     }
 
     my %opts;
@@ -568,7 +544,7 @@ sub mkdir {
 
     my $has_error;
     for my $path (@{ $args{paths} }) {
-        eval { $obj->{fs}->mkdir(\%opts, $path) };
+        eval { $org->{fs}->mkdir(\%opts, $path) };
         if ($@) {
             warn "Can't mkdir $path: $@\n";
             $has_error++;

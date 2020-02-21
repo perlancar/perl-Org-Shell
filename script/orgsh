@@ -16,7 +16,7 @@ my $shell = Org::Shell->new;
 $shell->cmdloop;
 
 1;
-# ABSTRACT: Navigate and manipulate in-memory Org document node objects using a CLI shell
+# ABSTRACT: Navigate and manipulate in-memory Org document tree using a CLI shell
 # PODNAME:
 
 =head1 SYNOPSIS
@@ -26,14 +26,14 @@ $shell->cmdloop;
 
  orgsh> _
 
-Load am Org document as tree object:
+Load an Org document:
 
- orgsh> loadobj --as animals --source /home/budi/animals.org
- orgsh> loadobj animals /home/budi/animals.org
+ orgsh> loadorg --as animals --source /home/budi/animals.org
+ orgsh> loadorg animals /home/budi/animals.org
 
-Load another tree object:
+Load another Org document:
 
- orgsh> load plants ~/plants.org
+ orgsh> loadorg plants ~/plants.org
 
 See loaded objects:
 
